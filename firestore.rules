@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Apenas utilizadores autenticados podem ler ou gravar na coleção Transacoes
+    match /Transacoes/{transacaoId} {
+      allow read, update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.Data is string
+                    && request.resource.data.Descricao is string
+                    && request.resource.data.Entrada is number
+                    && request.resource.data.Saida is number;
+    }
+  }
+}
