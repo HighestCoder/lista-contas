@@ -1,15 +1,51 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Apenas utilizadores autenticados podem ler ou gravar na coleção Transacoes
+
+    // ===============================================================
+    // Funções Auxiliares de Autenticação e Propriedade
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Coleção: Transacoes
+    // ===============================================================
+    // Regra: Apenas o usuário autenticado pode ler, criar,
+    // atualizar e excluir os seus próprios lançamentos de livro-caixa.
+    // ===============================================================
     match /Transacoes/{transacaoId} {
-      allow read, update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
-      allow create: if request.auth != null
+      // Leitura (get e list/query):
+      // Autoriza consultas filtradas explicitamente por where('userId', '==', request.auth.uid)
+      allow read: if isDocOwner();
+
+      // Criação de novos lançamentos:
+      // Garante que o userId seja do usuário logado e valida os campos obrigatórios
+      allow create: if isAuthenticated()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.Data is string
                     && request.resource.data.Descricao is string
                     && request.resource.data.Entrada is number
                     && request.resource.data.Saida is number;
+
+      // Atualização de lançamentos existentes:
+      // O documento deve pertencer ao usuário e o userId não pode ser alterado
+      allow update: if isDocOwner()
+                    && (!('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId);
+
+      // Exclusão de lançamentos:
+      // Apenas o proprietário do lançamento pode excluí-lo
+      allow delete: if isDocOwner();
+    }
+
+    // Bloqueia qualquer outro documento/coleção por padrão
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
